@@ -19,7 +19,8 @@ const SPOTIFY_REDIRECT=location.origin+location.pathname;
 const SPOTIFY_SCOPES=["streaming","user-read-email","user-read-private","user-read-playback-state","user-modify-playback-state","user-read-currently-playing","playlist-read-private","playlist-read-collaborative"];
 let spotifyToken="",spotifyExpires=0,spotifyRefresh="",spotifyPlayer=null,spotifyDevice="",spotifyTrackState=null,spotifyProgressTimer=null,spotifyShuffleState=false,spotifyRepeatState="off";
 const spStore=sessionStorage;
-const spClient=()=>localStorage.getItem("mcc_spotify_client_id")||"";
+const SPOTIFY_CLIENT_ID="53f4df522b224ba6831f54d644b6207f";
+const spClient=()=>localStorage.getItem("mcc_spotify_client_id")||SPOTIFY_CLIENT_ID;
 const spB64=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 async function spVerifier(){const a=new Uint8Array(64);crypto.getRandomValues(a);return [...a].map(x=>"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"[x%66]).join("");}
 async function spChallenge(v){return spB64(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v)));}
