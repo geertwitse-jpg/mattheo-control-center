@@ -96,7 +96,52 @@ async function spotifyBoot(){
 }
 spotifyBoot();
 
+
+// Free weather via Open-Meteo (no API key). Coordinates are stored locally only.
+const weatherCodes={
+ 0:["Helder","☀"],1:["Overwegend helder","🌤"],2:["Half bewolkt","⛅"],3:["Bewolkt","☁"],
+ 45:["Mist","🌫"],48:["Rijpende mist","🌫"],51:["Lichte motregen","🌦"],53:["Motregen","🌦"],55:["Dichte motregen","🌧"],
+ 56:["Lichte ijzelmotregen","🌧"],57:["IJzelmotregen","🌧"],61:["Lichte regen","🌦"],63:["Regen","🌧"],65:["Zware regen","🌧"],
+ 66:["Lichte ijzelregen","🌧"],67:["Zware ijzelregen","🌧"],71:["Lichte sneeuw","🌨"],73:["Sneeuw","❄️"],75:["Zware sneeuw","❄️"],
+ 77:["Sneeuwkorrels","🌨"],80:["Lichte regenbuien","🌦"],81:["Regenbuien","🌧"],82:["Zware regenbuien","⛈"],
+ 85:["Lichte sneeuwbuien","🌨"],86:["Zware sneeuwbuien","❄️"],95:["Onweer","⛈"],96:["Onweer met hagel","⛈"],99:["Zwaar onweer met hagel","⛈"]
+};
+let weatherPlace=null,weatherBusy=false;
+function weatherInfo(code){return weatherCodes[code]||["Onbekend","☁"];}
+function weatherSetMessage(message){const e=$("#weatherMessage");if(e)e.textContent=message;}
+function weatherSavePlace(place){weatherPlace=place;localStorage.setItem("mcc_weather_place",JSON.stringify(place));}
+async function weatherLoad(lat,lon,name){
+ if(weatherBusy)return;weatherBusy=true;weatherSetMessage("Weer wordt opgehaald…");
+ try{
+  const u=new URL("https://api.open-meteo.com/v1/forecast");
+  Object.entries({latitude:lat,longitude:lon,current:"temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m",daily:"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",timezone:"auto",forecast_days:"5"}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r=await fetch(u);if(!r.ok)throw Error("Weerbron tijdelijk niet bereikbaar.");const d=await r.json();const c=d.current,info=weatherInfo(c.weather_code);
+  $("#weatherLocationLabel").textContent=name;$("#weatherUpdated").textContent="Bijgewerkt om "+new Date().toLocaleTimeString("nl-BE",{hour:"2-digit",minute:"2-digit"});
+  $("#weatherTemp").textContent=Math.round(c.temperature_2m)+"°";$("#weatherCondition").textContent=info[0];$("#weatherFeels").textContent="Voelt als "+Math.round(c.apparent_temperature)+"°";
+  $("#weatherIcon").textContent=info[1];$("#weatherApparent").textContent=Math.round(c.apparent_temperature)+"°";$("#weatherWind").textContent=Math.round(c.wind_speed_10m)+" km/u";$("#weatherRain").textContent=Math.round(c.precipitation||0)+" mm";$("#weatherHumidity").textContent=Math.round(c.relative_humidity_2m)+"%";
+  $("#dashWeatherTemp").textContent=Math.round(c.temperature_2m)+"°";$("#dashWeatherText").textContent=info[0];$("#dashWeatherArt").textContent=info[1];$("#dashWeatherIcon").textContent=info[1];$("#dashWeatherPlace").textContent=name;$("#weatherMini").textContent=Math.round(c.temperature_2m)+"° · "+info[0];
+  $("#weatherForecast").innerHTML=d.daily.time.map((day,i)=>{const dt=new Date(day+"T12:00:00");const label=i===0?"Vandaag":new Intl.DateTimeFormat("nl-BE",{weekday:"short"}).format(dt);const inf=weatherInfo(d.daily.weather_code[i]);return '<div class="card forecast-day"><span>'+label+'</span><b>'+inf[1]+'</b><strong>'+Math.round(d.daily.temperature_2m_max[i])+'°</strong><small>'+Math.round(d.daily.temperature_2m_min[i])+'° · '+(d.daily.precipitation_probability_max?.[i]??0)+'% regen</small></div>';}).join("");
+  weatherSetMessage("Weer succesvol bijgewerkt.");weatherSavePlace({latitude:lat,longitude:lon,name});
+ }catch(e){weatherSetMessage(e.message||"Weer ophalen mislukt.");}
+ finally{weatherBusy=false;}
+}
+function weatherLocate(){
+ if(!navigator.geolocation){weatherSetMessage("Locatiebepaling wordt niet ondersteund door deze browser.");return;}
+ weatherSetMessage("Vraag om locatietoestemming aan je browser…");
+ navigator.geolocation.getCurrentPosition(async p=>{let name="Mijn locatie";try{const u=new URL("https://geocoding-api.open-meteo.com/v1/reverse");u.searchParams.set("latitude",p.coords.latitude);u.searchParams.set("longitude",p.coords.longitude);u.searchParams.set("language","nl");u.searchParams.set("format","json");const r=await fetch(u);const d=await r.json();const x=d.results?.[0];if(x)name=[x.name,x.admin1].filter(Boolean).join(", ");}catch{}weatherLoad(p.coords.latitude,p.coords.longitude,name);},e=>weatherSetMessage(e.code===1?"Locatietoegang geweigerd. Zoek hieronder handmatig een plaats.":"Locatie kon niet worden bepaald. Zoek hieronder handmatig een plaats."),{enableHighAccuracy:false,timeout:12000,maximumAge:300000});
+}
+async function weatherSearch(){
+ const q=$("#weatherCity").value.trim();if(!q){weatherSetMessage("Vul eerst een plaatsnaam in.");return;}
+ weatherSetMessage("Plaats wordt gezocht…");
+ try{const u=new URL("https://geocoding-api.open-meteo.com/v1/search");Object.entries({name:q,count:"5",language:"nl",format:"json"}).forEach(([k,v])=>u.searchParams.set(k,v));const r=await fetch(u);if(!r.ok)throw Error("Plaats zoeken is tijdelijk niet beschikbaar.");const d=await r.json();const x=d.results?.[0];if(!x){weatherSetMessage("Geen plaats gevonden. Probeer een andere schrijfwijze.");return;}weatherLoad(x.latitude,x.longitude,[x.name,x.admin1,x.country].filter(Boolean).join(", "));}
+ catch(e){weatherSetMessage(e.message);}
+}
+function weatherBoot(){
+ $("#weatherLocate").addEventListener("click",weatherLocate);$("#weatherRefresh").addEventListener("click",()=>weatherPlace?weatherLoad(weatherPlace.latitude,weatherPlace.longitude,weatherPlace.name):weatherLocate());$("#weatherSearch").addEventListener("click",weatherSearch);$("#weatherCity").addEventListener("keydown",e=>{if(e.key==="Enter")weatherSearch();});
+ try{const saved=JSON.parse(localStorage.getItem("mcc_weather_place")||"null");if(saved?.latitude&&saved?.longitude){weatherPlace=saved;weatherLoad(saved.latitude,saved.longitude,saved.name||"Opgeslagen locatie");}}catch{}
+}
+
 function networkStatus(){const online=navigator.onLine;$("#internetStatus").textContent=online?"Internet beschikbaar":"Offline";$("#networkOnline").textContent=online?"Online":"Offline";$("#networkDetail").textContent=online?"Browser meldt een actieve netwerkverbinding":"Geen netwerkverbinding gedetecteerd";}
 window.addEventListener("online",networkStatus);window.addEventListener("offline",networkStatus);networkStatus();
 $("#speedTest").addEventListener("click",async()=>{const b=$("#speedTest"),out=$("#speedResult"),note=$("#speedNote");b.disabled=true;b.textContent="Meten…";out.innerHTML="… <small>Mbps</small>";note.textContent="Test wordt uitgevoerd.";try{const start=performance.now();const response=await fetch("https://speed.cloudflare.com/__down?bytes=5000000",{cache:"no-store"});if(!response.ok)throw new Error("Testserver niet bereikbaar");const data=await response.arrayBuffer();const seconds=(performance.now()-start)/1000;const mbps=(data.byteLength*8/seconds/1e6).toFixed(1);out.innerHTML=mbps+' <small>Mbps</small>';note.textContent="Indicatieve downloadsnelheid · "+(data.byteLength/1e6).toFixed(1)+" MB ontvangen.";}catch(e){out.innerHTML="— <small>Mbps</small>";note.textContent="Meten mislukt. Controleer je internetverbinding en probeer opnieuw.";}finally{b.disabled=false;b.textContent="Opnieuw meten";}});
-updateClock();setInterval(updateClock,1000);
+weatherBoot();updateClock();setInterval(updateClock,1000);
