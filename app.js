@@ -1,0 +1,20 @@
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let pin="",currentPage="dashboard";
+const pad=n=>String(n).padStart(2,"0");
+function updateClock(){const d=new Date(),time=pad(d.getHours())+":"+pad(d.getMinutes()),date=new Intl.DateTimeFormat("nl-BE",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(d);["#loginTime","#heroTime","#dashTime"].forEach(s=>{const e=$(s);if(e)e.textContent=time});$("#loginDate").textContent=date;$("#heroDate").textContent=date;$("#fullDate").textContent=date;$("#greeting").textContent=d.getHours()<12?"Goedemorgen":d.getHours()<18?"Fijne middag":"Goede avond";}
+function showApp(){ $("#login").classList.add("hidden");$("#app").classList.remove("hidden"); }
+function lockApp(){pin="";drawDots();$("#app").classList.add("hidden");$("#login").classList.remove("hidden");$("#loginHint").textContent="Dashboard vergrendeld.";}
+function drawDots(){ $$("#pinDots i").forEach((el,i)=>el.classList.toggle("filled",i<pin.length));}
+$("#keypad").addEventListener("click",e=>{const key=e.target.closest("button")?.dataset.key;if(!key)return;if(key==="clear")pin="";else if(key==="back")pin=pin.slice(0,-1);else if(pin.length<6)pin+=key;drawDots();if(pin.length===6){if(pin==="123456"){showApp();$("#loginHint").textContent="";}else{$("#loginHint").textContent="Onjuiste demo-pincode. Probeer opnieuw.";pin="";setTimeout(drawDots,300);} }});
+function navigate(page){currentPage=page;$$(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+page));$$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.page===page));$("#pageCrumb").textContent=page.replace("-"," ").toUpperCase();$("#sidebar").classList.remove("open");window.scrollTo(0,0);}
+$$("[data-page]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.page)));
+$$("[data-page-link]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.pageLink)));
+$("#menuButton").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
+$("#lockButton").addEventListener("click",lockApp);$("#settingsLock").addEventListener("click",lockApp);
+function modal(title,body){$("#modalTitle").textContent=title;$("#modalText").textContent=body;$("#modal").classList.remove("hidden");}
+$("#modalClose").addEventListener("click",()=>$("#modal").classList.add("hidden"));$("#modalOk").addEventListener("click",()=>$("#modal").classList.add("hidden"));
+$("#spotifySetup").addEventListener("click",()=>modal("Spotify koppelen","De volgende stap is een gratis Spotify Developer-app aanmaken. Daarna voegen we de Redirect URI toe en bouwen we OAuth PKCE en de Web Playback SDK in. Je hebt Spotify Premium nodig voor volledige bediening. Je Spotify-wachtwoord of client secret hoef je nooit met mij te delen."));
+function networkStatus(){const online=navigator.onLine;$("#internetStatus").textContent=online?"Internet beschikbaar":"Offline";$("#networkOnline").textContent=online?"Online":"Offline";$("#networkDetail").textContent=online?"Browser meldt een actieve netwerkverbinding":"Geen netwerkverbinding gedetecteerd";}
+window.addEventListener("online",networkStatus);window.addEventListener("offline",networkStatus);networkStatus();
+$("#speedTest").addEventListener("click",async()=>{const b=$("#speedTest"),out=$("#speedResult"),note=$("#speedNote");b.disabled=true;b.textContent="Meten…";out.innerHTML="… <small>Mbps</small>";note.textContent="Test wordt uitgevoerd.";try{const start=performance.now();const response=await fetch("https://speed.cloudflare.com/__down?bytes=5000000",{cache:"no-store"});if(!response.ok)throw new Error("Testserver niet bereikbaar");const data=await response.arrayBuffer();const seconds=(performance.now()-start)/1000;const mbps=(data.byteLength*8/seconds/1e6).toFixed(1);out.innerHTML=mbps+' <small>Mbps</small>';note.textContent="Indicatieve downloadsnelheid · "+(data.byteLength/1e6).toFixed(1)+" MB ontvangen.";}catch(e){out.innerHTML="— <small>Mbps</small>";note.textContent="Meten mislukt. Controleer je internetverbinding en probeer opnieuw.";}finally{b.disabled=false;b.textContent="Opnieuw meten";}});
+updateClock();setInterval(updateClock,1000);
